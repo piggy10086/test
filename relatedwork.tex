@@ -1,0 +1,536 @@
+
+\chapter{背景与相关工作综述}\label{sec:related}
+
+\section{背景}\label{sec:related:frame}
+
+\subsection{中断驱动系统}\label{sec:related:idrace}
+In embedded systems, an interrupt alerts the processor to a high-priority condition requiring
+the interruption of the current code the processor is executing.
+The processor responds by suspending its current activities, saving its state,
+and executing a function called an interrupt handler (or an interrupt service routine, ISR)
+to deal with the event. This interruption is temporary, and, after the interrupt handler
+finishes, the processor resumes normal activities.
+
+We denote an interrupt-driven program by
+$P$ = {\tt Task} $\|$ {\tt ISR},
+where {\tt Task} is the main program that consists
+of one or more tasks (or threads) and
+{\tt ISR} = $ISR_1 \| ISR_2 \| \ldots \| ISR_N$
+indicates interrupt service routines. The
+subscripts of ISRs indicate interrupt numbers,
+with larger numbers denoting lower priorities.
+Typically, $P$ receives two types of \emph{incoming data}:
+command inputs as entered by users
+and sensor inputs such as data received
+through specific devices (\eg, a UART port).
+An \emph{interrupt schedule} specifies a sequence
+of interrupts occurring at specified program locations.
+%The input data and an interrupt schedule for $P$
+%together form a \emph{test case} for $P$.
+In this work, we do not consider reentrant interrupts
+(interrupts that can preempt themselves); these are uncommon
+and used only in special situations~\cite{Regehr05}.
+
+在嵌入式系统中，中断会提醒处理器一个高优先级的情况，要求处理器中断当前正在执行的代码。处理器的响应方式是挂起当前的活动，保存其状态，并执行一个中断处理程序(或中断服务例程，ISR)函数来处理事件。这个中断是暂时的，并且在中断处理程序完成后，处理器恢复正常运行。
+我们用$P$ = {\tt Task} $\|$ {\tt ISR}来表示中断驱动程序，其中{\tt Task}是由一个或多个任务(或线程)组成的主程序，
+{\tt ISR} = $ISR_1 \| ISR_2 \| \ldots \| ISR_N$
+表示中断服务程序。ISRs的下标表示中断编号，较大的数字表示较低的优先级。
+通常，$P$接收两种类型的\emph{输入数据}:用户输入的命令输入和通过特定设备(\eg,UART端口)接收的传感器输入。
+\emph{中断安排}详述在指定的程序位置发生的一系列中断。 
+在这项工作中，我们不考虑可重入中断(可以抢占自己的中断);这些是不常见的，只在特殊情况下使用~\cite{Regehr05}。
+
+\subsection{数据竞争和中断驱动系统下的数据竞争}\label{sec:related:idrace}
+处理的API有wait/notify...
+\subsubsection{应用程序下的数据竞争}
+Data race occurs when two conflicting accesses to one shared variable are executed without proper synchronization, e.g., not protected by a common lock.
+
+当对一个共享变量的两个冲突访问在没有适当同步的情况下执行时，会发生数据竞争，例如没有受到公共锁的保护的情况。
+
+\subsubsection{中断驱动系统下的数据竞争}
+
+
+A race condition occurs if two events access a shared resource for which the order of accesses is nondeterministic, i.e., the accesses may happen in either order or simultaneously \cite{vonPraun2011, netzer1992what}. 
+It broadly refers to data races (if accessing the shared resource simultaneous) and order violations (if accessing the resources in either order).  
+Specifically, in our context, a race condition is reported when two conditions are met: 
+1) the execution of
+a task or an interrupt handler $T$
+is preempted by another interrupt handler $H$ after
+a shared memory access $m$, and 2)  $H$
+manipulates the content of $m$.
+More formally,
+
+
+\begin{center}
+$\mathit{
+e_i = MEM (m_i, a_i, T_i, p_i, s_i) \wedge e_j = MEM (m_j,
+a_j, T_j, p_j, s_j)}$
+$\mathit{\wedge m_i = m_j \wedge  (a_j =
+WRITE \vee a_i = WRITE)}$
+$\mathit{  \wedge s_i = s_j.enabled \wedge p_j > p_i
+}$
+\end{center}
+
+\noindent
+MEM$(m_i, a_i, T_i, p_i, s_i)$ denotes a 
+task or an ISR $T_i$ with priority $p_i$ performs
+an access $a \in $\{WRITE, READ\} to memory location $m_i$ while
+in an hardware state $s_i$. 
+The above condition states that two events $e_i$ and $e_j$ are in race condition
+if they access the same memory location and at least one access is a write.
+Here,
+$e_i$ is from a task or an ISR and $e_j$ is from a different ISR,
+the interrupt of $H_j$ is enabled when $e_i$
+happens, and the priority $p_j$ is greater than $p_i$.
+
+We consider the definition as a variant of order violations.
+Data races \cite{pratikakis2006locksmith} are not
+applicable between a task and an ISR or between ISRs,
+because a memory cannot be simultaneously accessed
+by the tasks or the ISRs. That said, a memory is always 
+accessed by a task (or a low-priority ISR) and then preempted by an ISR.
+Interrupts have an asymmetric preemption relation with the processor's 
+non-interrupt context: 
+interrupts can preempt non-interrupt activity (\ie, tasks)
+but the reverse is not true~\cite{Regehr05}. 
+Atomicity violations  \cite{lu2008learning} are not applicable because they require three shared variable accesses.
+Traditional order violations \cite{lu2008learning} are also not applicable since there is no enforced execution order.
+However, we regard it as a variant of order violations because interrupts have an asymmetric preemption relation with the processor's non-interrupt context.
+
+
+如果两个事件访问的共享资源的访问顺序不确定，即访问可以按顺序进行，也可以同时进行，则会发生竞争条件 \cite{vonPraun2011, netzer1992what}。
+它泛指数据竞争(如果同时访问共享资源)和顺序冲突(如果以任意顺序访问资源)。
+具体来说，在我们的上下文中，当满足两个条件时会报告竞争条件：
+1) 在共享内存访问$m$之后，另一个中断处理程序$H$抢占了任务或中断处理程序$T$的执行, 2) $H$操作$m$的内容。更具体地说，
+\begin{center}
+	$\mathit{
+		e_i = MEM (m_i, a_i, T_i, p_i, s_i) \wedge e_j = MEM (m_j,
+		a_j, T_j, p_j, s_j)}$
+	$\mathit{\wedge m_i = m_j \wedge  (a_j =
+		WRITE \vee a_i = WRITE)}$
+	$\mathit{  \wedge s_i = s_j.enabled \wedge p_j > p_i
+	}$
+\end{center}
+
+
+\noindent
+MEM$(m_i, a_i, T_i, p_i, s_i)$表示任务或优先级为$p_i$的ISR $T_i$在硬件状态$s_i$下执行对存储位置$m_i$的访问 $a \in $\{WRITE, READ\}。上面的条件表明，如果两个事件$e_i$和$e_j$访问相同的存储位置，并且至少一个访问是写操作，则它们处于竞争状态。 在这里，$e_i$来自任务或ISR，而$e_j$来自不同的ISR，当$e_i$发生时，将启用$H_j$的中断，并且优先级$p_j$大于$p_i$。
+
+我们认为该定义是命令违反的变体。 数据竞争\cite{pratikakis2006locksmith}在任务与ISR之间或ISR之间不适用，因为一块内存不能同时被任务或ISR访问。也就是说，内存始终由任务(或低优先级ISR)访问，然后被ISR抢占。中断与处理器的非中断上下文具有不对称的抢占关系：中断可以抢占非中断活动(\ie,任务)，但反之则不成立~\cite{Regehr05}。违反原子性 \cite{lu2008learning} 不适用，因为它们需要三个共享变量访问。 传统的违反命令 \cite{lu2008learning} 也不适用，因为没有强制执行的命令。但是因为中断与处理器的非中断上下文具有不对称的抢占关系，我们将其视为命令违反的一种变体。
+
+
+\subsection{Graph}\label{sec:related:graph}
+
+
+
+\label{subsection:gra}
+A graph $G\! =\! (V, E)$ consists of a set of nodes $V \!= \!\{v_1, ..., v_n\}$, and a list of directed edge sets $E = (E_1, . . . , E_K)$ where $K$ is the total number of edge types and $E_k$ ($1 \leq k \leq K$) is a set of edges of type $k$. We denote by $(v_s, v_d, k) \in E_k$ an edge of type $k$ directed from node $v_s$ to node $v_d$. For graphs with only one edge type, an edge is represented as $(v_s, v_d)$.
+
+The immediate successors of a node $v_i$, denoted by $\textit{post}\,(v_i)$, are all of the nodes $v_j$ for which $(v_i, v_j)$ is an edge in one edge set in $E$. The immediate predecessors of node $v_j$, denoted by $\textit{pre}\,(v_j)$, are all of the nodes $v_i$ for which $(v_i, v_j)$ is an edge in one edge set in $E$. 
+
+A path is an ordered sequence of nodes $(v_p,..., v_q)$ and their connecting edges, in which each node $v_t$, $t\in(p,\dots,q-1)$, is an immediate predecessor of $v_{t+1}$. A closed path is a path in which the first and last nodes are the same. The successors of a node $v_t$, denoted by $\textit{post}\,^{*}(v_t)$, are all of the nodes $v_x$ for which there exists a path from $v_t$ to $v_x$. The predecessors of a node $v_t$, denoted by $\textit{pre}\,^{*}(v_t)$, are all of the nodes $v_y$ for which there exists a path from $v_y$ to $v_t$.
+% \vspace*{-15pt}
+
+图$G\! =\! (V, E)$由一组节点$V \!= \!\{v_1, ..., v_n\}$和一个有向边集合$E = (E_1, . . . , E_K)$组成，其中$K$为总数边类型的数量，并且$E_k$ ($1 \leq k \leq K$)是类型$k$的一组边。我们用 $(v_s, v_d, k) \in E_k$ 表示从节点$v_s$指向节点$v_d$的类型为$k$的边。对于只有一种边类型的图，边表示为$(v_s, v_d)$。
+
+节点$v_i$的直接后继节点(用$\textit{post}\,(v_i)$表示)是所有节点 $v_j$，其中$(v_i, v_j)$是$E$中一个边集中的一条边。节点$v_j$的直接后继节点(用$\textit{pre}\,(v_j)$表示)是所有节点$v_i$，其中$(v_i, v_j)$是$E$中一个边集合中的边。
+
+路径是节点$(v_p,..., v_q)$及其连接边的有序序列，其中每个节点$v_t$，$t\in(p,\dots,q-1)$是$v_{t+1}$的直接前任节点。封闭路径是第一个节点和最后一个节点相同的路径。节点$v_t$的后继节点(用$\textit{post}\,^{*}(v_t)$表示),是所有存在从$v_t$到$v_x$的路径的节点$v_y$。节点$v_t$的前任节点(用$\textit{pre}\,^{*}(v_t)$表示)，是所有存在$v_y$到$v_t$路径的节点$v_y$。
+
+\subsection{Interval}\label{sec:related:interval}
+
+Introduced by~\citet{Allen1970}, an interval \textit{I(h)} is the maximal,
+single entry subgraph in which \textit{h} is the only entry node
+and all closed paths contain \textit{h}. The unique
+interval node \textit{h} is called the interval head or simply the
+header node. An interval can be expressed in terms of
+the nodes in it: $I(h) = \{v_l, v_2, ... ,v_m\}.$ 
+
+By selecting the proper set of header nodes, a graph can be partitioned into a set of disjoint intervals. We show the partition procedure proposed by~\citet{Allen1970} in Algorithm \ref{alg:intervals}. The key is to add to an interval a node only if all of its immediate predecessors are already in the interval (Line \ref{li:w2} to \ref{li:s2}). The intuition is such nodes when added to an interval keep the original header node as the single entry of an interval. To find a header node to form another interval, a node is picked that is not a member of any existing intervals although it must have a (but not all) immediate predecessor being a member of the interval that is just computed
+(Line \ref{li:w3} to \ref{li:s3}). We repeat the process until reaching the fixed-point where all nodes are members of an interval. 
+
+The intervals on the original graph 
+are called the first order intervals, denoted by 
+$I^1(h)$, and the graph from which they were derived 
+is called first order graph $G^1$. Partitioning the first 
+order graph results in a set of first order intervals, denoted by $\mathcal{S}^1$ \st 
+$I^1(h) \in \mathcal{S}^1$. By making each first order 
+interval into a node and each interval exit edge into 
+an edge, the second order graph can be derived, from 
+which the second order intervals can also be defined. 
+The procedure can be repeated to derive successively 
+higher order graphs until the n-th order graph consists 
+of a single interval.
+Figure~\ref{fig:interval} illustrates 
+such a sequence of derived graphs. 
+
+由~\citet{Allen1970}介绍，interval \textit{I(h)}是最大的单项子图，其中\textit{h}是唯一的入口节点，所有闭合路径都包含\textit{h}。 唯一的interval节点\textit{h}称为interval head或简称为header node。 interval可以用其中的节点表示 ： $I(h) = \{v_l, v_2, ... ,v_m\}。$
+
+通过选择适当的头节点集，可以将图划分为一组不相交的intervals。我们在算法\ref{alg:intervals}中显示~\citet{Allen1970}提出的分区过程。关键是仅当节点的所有前任节点都已在该interval中时(行\ref{li:w2}到行\ref{li:s2})，才将节点添加到该interval中。直觉是这样的节点，当添加到间隔中时，将原头节点保留为interval的单个条目。要找到一个头节点以形成另一个interval，需选择一个不属于任何现有interval的节点，尽管该节点必须具有(但不是全部)直接的前任节点才是刚刚计算的interval的成员(行\ref{li:w3}到行\ref{li:s3})。我们重复此过程，直到到达所有节点都是interval成员的固定点为止。
+
+原始图上的interval称为一阶interval，用$I^1(h)$表示，从中得出这些图的interval称为一阶图$G^1$。对第一阶图进行分区会产生一组第一阶interval，表示为$\mathcal{S}^1$ \st 
+$I^1(h) \in \mathcal{S}^1$。通过将每个第一阶interval设为一个节点，并将每个interval存在边设为一个边，可以导出第二阶图，从中也可以定义第二阶interval。 可以重复该过程以导出连续更高阶的图，直到n阶图由单个interval组成。 图~\ref{fig:interval}说明了这样的一系列导出图。
+
+%TODO: change it to algorithm style.
+%\begin{minipage}{.99\linewidth}
+%\hspace{-12.5pt}
+%\begin{algorithm}[H]
+%% \adjustbox{max width=0.99\columnwidth}{
+%\small
+%\caption{Finding intervals for a given graph} 
+%\label{alg:intervals}
+%\raggedright
+%\KwIn {a set of nodes $V$ on a graph}
+%\KwOut {a set of intervals $\mathcal{S}$}
+%// Assume $v_0$ is the unique entry node of the graph
+%
+%H = \{$v_0$\}\;
+%\While{$H \neq \emptyset$}
+%{
+%        // remove next $h$ from $H$
+%        
+%        h = H.pop()\;
+%        I(h) = \{h\}\;
+%        // only nodes that are neither in the current interval nor any other interval will be considered 
+%        
+%        
+%        \While{$\{v \in V \,| \, v \notin I(h) \wedge \nexists s (s \in \mathcal{S} \wedge v \in s) \wedge  pre(v) \subseteq I(h)\} \neq \emptyset$\label{li:w2}}   
+%        {
+%           I(h) = I(h) $\cup$ \{ v \}\; \label{li:s2}
+%        }
+%        // find next headers
+%        
+%        \While{$\{v \in V  \,| \, \nexists s_{1} (s_{1} \in \mathcal{S} \wedge v \in s_{1})  \wedge \exists m_{1}, m_{2} (m_{1},m_{2} \in pre(v) \wedge m_{1} \in I(h) \wedge m_{2} \notin I(h)) \}\! \neq\! \emptyset$\label{li:w3}}
+%        {
+%            H = H $\cup$ \{ v \}\; \label{li:s3}
+%        }
+%        $\mathcal{S}$ = $\mathcal{S}$ $\cup$ I(h)\;
+%}
+%% }
+%\end{algorithm}
+%\end{minipage}
+%% \vspace*{-15pt}
+%\begin{figure}[h]
+%\vspace*{-17pt}
+%\centering
+%  \hspace{-4pt}\includegraphics[width=.992\linewidth]{pics/OOPSLA.png}
+%  \caption{n-th order intervals and graphs. The set of intervals on $\mathcal{S}^1$ are $I^1(1)$=\{1\}, $I^1(2)$=\{2\}, $I^1(3)$=\{3,4,5,6\}, $I^1(7)$=\{7\}. 
+%  The set of intervals on $\mathcal{S}^2$ are $I^2(1)$=\{1\} and $I^2(2)$=\{2,7,8\}. $I^3(1)$=\{1,9\} and $I^4(10)$=\{10\} are the only intervals on $\mathcal{S}^3$ and $\mathcal{S}^4$ respectively.}
+%  \label{fig:interval}
+%\end{figure}
+%\vspace*{-20pt}
+
+\subsection{门控图神经网络}\label{sec:related:ggnn}
+
+Graph Neural Network (GNN)~\cite{gori2005new} is a specialized machine learning model designed to learn from graph data. The intuitive idea underlying GNN is that nodes in a graph represent objects and edges represent their relationships. Thus, each node $v$ can be attached to a vector, called state, which collects a representation of the object denoted by $v$. Naturally, the state of $v$ can be specified using the information provided by nodes in the neighborhood of $v$. Technically, there are many realizations of this idea. Here, we describe the message-passing technique~\cite{Gilmer10}, a widely applied method for GNN to compute the states of nodes.
+
+We reuse the terminology of graph introduced in Section~\ref{subsection:gra}. Given a graph ${G}\! =\! ({V}, {E})$ where ${V}$ and ${E}$ are the inputs, a neural message-passing GNN computes the state vector for each node in a sequence of steps. In each step, every node first sends messages to all of its neighbors, and then update its state vector by aggregating the information received from its neighbors.
+\begin{equation}
+\mu^{(l+1)}_{v} = \phi(\{\mu^{(l)}_{u}\}_{u \in \mathcal{N}(v)})  \label{equ:h} %
+\end{equation}
+% \mu^{(l+1)}_{v} = \sum_{\mathclap{u \in \mathcal{N}{(v)}}} f(\mu^{(l)}_{u})  \label{equ:h} %h(\{\}_{u \in \mathcal{N}^{k}(v),\, k \in 
+$\mu^{(l+1)}_{v}$ denotes the state of $v$ in $l+1$ steps, which is determined by the state of its neighbors in the previous step. $\mathcal{N}{(v)}$ denotes the neighbors that are connected to $v$. Formally, $\mathcal{N}{(v)} = \{u|(u,v,k) \in {E}_k, \forall k \in \{1,2,...,K\}\}$. $\phi(\cdot)$ is a non-linear function that performs the aggregation. After the state of each node is computed with many rounds of message passing, a graph representation can also be obtained through various pooling operations (\eg average or sum). 
+% By directly connecting to a softmax regression layer, GNN is ready to serve a downstream classification task.
+% In $L$ steps message passing, GNN updates $\mu_{v}$ to $\mu^{(L)}_{v}, \forall v \in \mathcal{V}$. 
+
+Some GNN~\cite{Si10} computes a separate node state \wrt an edge type (\ie $\mu^{(l+1), k}_{v}$ in Equation~\ref{equ:type}) before aggregating them into a final state (\ie $\mu^{(l+1)}_{v}$ in Equation~\ref{equ:sum}).
+\begin{align*}
+\mu^{(l+1), k}_{v} &= \phi_1(\sum_{\mathclap{u \in \mathcal{N}^{k}{(v)}}} \mathbf{W_1} \mu_u^{(l)}), \forall k \in \{1,2,...,K\} \Label{equ:type} &\;\;\;\;\;\;\,
+\mu^{(l+1)}_{v} &= \phi_2(\mathbf{W_2}[ \mu_v^{(l), 1}, \mu_v^{(l), 2}, ..., \mu_v^{(l), K}]) \Label{equ:sum}
+\end{align*}
+$\mathbf{W_1}$ and $\mathbf{W_2}$ are variables to be learned, and $\phi_1$ and $\phi_2$ are some nonlinear activation functions.
+
+\citet{li2015gated} proposed Gated Graph Neural Network (GGNN) as a new variant of GNN. Their major contribution is a new instantiation of $\phi(\cdot)$ using Gated Recurrent Units~\cite{cho-cho2014learning}. The following equations describe how GGNN works:
+\begin{align*}
+% \qquad\qquad\qquad\qquad\qquad
+\qquad\qquad\,\,
+{m}_v^l &= \sum_{\mathclap{u \in \mathcal{N}{(v)}}} f(\mu_{u}^{(l)}) \qquad\qquad\Label{equ:mes1} & 
+\qquad\qquad\qquad
+\mu^{(l+1)}_{v} &= \mathit{GRU}({m}_v^l, \mu^{(l)}_{v})\qquad\qquad\Label{equ:mes2}
+\end{align*}
+
+To update the state of node $v$, Equation~\ref{equ:mes1} computes a message ${m}_v^l$ using $f(\cdot)$ (\eg a linear function) from the states of its neighboring nodes $\mathcal{N}{(v)}$. Next, a $GRU$ takes ${m}_v^l$ and $\mu^{(l)}_{v}$ --- the current state of node $v$ --- to compute the new state $\mu^{(l+1)}_{v}$ (Equation~\ref{equ:mes2}). 
+
+\vspace*{3pt}
+\noindent
+\textbf{\textit{GNN's Weakness.}}\,
+Although the message-passing technique has highly empowered GNN, it severely hinders GNN's capability of learning patterns formed by nodes that are far apart in a graph. From a communication standpoint, 
+% When two nodes (\eg node A and B) are far apart on a graph, their communication turns into a major problem. Specifically, 
+a message 
+% have a large diameter (defined by the longest path between any two nodes in graph),
+sent out by the start node needs to go through many intermediate nodes en route to the end node. Due to the aggregation operation (regardless of which implementation in Equation~\ref{equ:h},~\ref{equ:sum}, or~\ref{equ:mes2} is adopted), the message gets diluted whenever it is absorbed by an intermediate node for updating its own state. By the time the message reaches the end node, it is too imprecise to bear any reasonable resemblance to the start node. This problem is particularly challenging in the programming domain where long-distance dependencies are common, important properties models have to capture.~\citet{allamanis2017learning} designed additional edges to connect nodes that exhibit a relationship of interest (\eg data or control dependency) but are otherwise far away from each other in an AST. The drawbacks are: first, their idea, albeit conceptually appealing, has not been rigorously tested in practice, therefore, the extent to which it addresses the scalability issue is unknown; second, they have not offered a principled solution regarding which edges to add in order to achieve the best scalability. Instead, they universally added a predefined set of edges to any graph, an approach that is far from satisfactory.
+
+图神经网络(GNN)~\cite{gori2005new}是一种专门用于从图数据中学习的机器学习模型。GNN的直观想法是，图中的节点表示对象，边表示它们之间的关系。因此，每个节点$v$可以附加到一个称为状态的向量，该向量收集由$v$表示的对象的表示形式。可以使用$v$附近的节点提供的信息来指定$v$的状态。这个想法有很多实现方法。在这里，我们描述了消息传递技术~\cite{Gilmer10}，这是GNN计算节点状态的一种广泛应用的方法。
+
+我们重用了~\ref{subsection:gra}中介绍的图的术语。给定一个图 ${G}\! =\! ({V}, {E})$，其中${V}$和${E}$是输入，神经消息传递GNN为每个图计算状态向量
+步骤中的节点。在每个步骤中，每个节点首先向其所有邻节点发送消息，然后通过汇总从其邻节点收到的信息来更新其状态向量。
+\begin{equation}
+\mu^{(l+1)}_{v} = \phi(\{\mu^{(l)}_{u}\}_{u \in \mathcal{N}(v)})  \label{equ:h} %
+\end{equation}
+$\mu^{(l+1)}_{v}$表示$v$在$l+1$步中的状态，它由上一步中其邻节点的状态确定。$\mathcal{N}{(v)}$表示连接到$v$的邻节点。从形式上讲$\mathcal{N}{(v)} = \{u|(u,v,k) \in {E}_k, \forall k \in \{1,2,...,K\}\}$. $\phi(\cdot)$是执行聚合的非线性函数。在通过多次消息传递来计算每个节点的状态之后，还可以通过各种池化操作 (\eg average or sum)来获得图形表示。
+
+一些GNN~\cite{Si10}计算一个单独的节点状态\wrt，边类型(\ie 表达式~\ref{equ:type}中的$\mu^{(l+1), k}_{v}$)，然后将其聚合成最终的状态(\ie 表达式~\ref{equ:sum}中的$\mu^{(l+1)}_{v}$)
+\begin{align*}
+\mu^{(l+1), k}_{v} &= \phi_1(\sum_{\mathclap{u \in \mathcal{N}^{k}{(v)}}} \mathbf{W_1} \mu_u^{(l)}), \forall k \in \{1,2,...,K\} \Label{equ:type} &\;\;\;\;\;\;\,
+\mu^{(l+1)}_{v} &= \phi_2(\mathbf{W_2}[ \mu_v^{(l), 1}, \mu_v^{(l), 2}, ..., \mu_v^{(l), K}]) \Label{equ:sum}
+\end{align*}
+$\mathbf{W_1}$和$\mathbf{W_2}$是要学习的变量，$\phi_1$和$\phi_2$是一些非线性激活函数
+
+\citet{li2015gated}提出了门控图神经网络(GGNN)作为GNN的新变体。它们的主要贡献是使用门控循环单元~\cite{cho-cho2014learning}的$\phi(\cdot)$的新实例。以下表达式描述了GGNN是如何工作的：
+\begin{align*}
+% \qquad\qquad\qquad\qquad\qquad
+\qquad\qquad\,\,
+{m}_v^l &= \sum_{\mathclap{u \in \mathcal{N}{(v)}}} f(\mu_{u}^{(l)}) \qquad\qquad\Label{equ:mes1} & 
+\qquad\qquad\qquad
+\mu^{(l+1)}_{v} &= \mathit{GRU}({m}_v^l, \mu^{(l)}_{v})\qquad\qquad\Label{equ:mes2}
+\end{align*}
+
+为了更新节点$v$的状态，公式~\ref{equ:mes1}从其邻节点$\mathcal{N}{(v)}$的状态使用$f(\cdot)$ (\eg 线性函数)计算了信息${m}_v^l$。接下来，$GRU$取${m}_v^l$和$\mu^{(l)}_{v}$(节点$v$的当前状态)来计算新状态$\mu^{(l+1)}_{v}$ (公式~\ref{equ:mes2})。
+
+\vspace*{3pt}
+\noindent
+\textbf{\textit{GNN的缺陷。}}\,
+GNN的弱点。尽管消息传递技术赋予了GNN很大的权力，但它严重阻碍了GNN学习由图中相距较远的节点形成的学习模式的能力。从通信的角度来看，起始节点发出的消息需要经过许多中间节点才能到达终止节点。由于聚合操作(无论采用哪种公式~\ref{equ:h},~\ref{equ:sum}, 或~\ref{equ:mes2}进行实现)，只要消息被中间节点吸收以更新其自身状态，该消息就会被稀释。在消息到达结束节点时，它已经非常不精确了，无法与开始节点形成任何合理的相似之处。在长距离相关性常见的编程领域中，这个问题尤其具有挑战性，必须捕获重要的属性模型。~\citet{allamanis2017learning}设计了额外的边来连接表现出有意义的关系(\eg 数据或控制依赖性)但在AST中彼此相距较远的节点。缺点是：首先尽管从概念上讲吸引人，但他们的想法尚未在实践中经过严格测试，因此解决可扩展性问题的程度尚不明了；其次他们没有提供为了实现最佳的可扩展性添加哪些边的原则性解决方案。相反，他们普遍向所有图添加了一组预定义的边，这远没有达到要求。
+
+\section{静态缺陷检测技术}\label{sec:related:static}
+
+\subsection{MHP analysis:}
+MHP分析：先前已经有许多工作分析了MHP关系，特别是对于具有高级并发结构的语言，如Java \cite{barik2005efficient, naumovich1999efficient} 和X10 \cite{agarwal2007may, albert2015may, sankar2016improved}。此外也有工作聚焦于其它语言\cite{zhou2018may, joshi2012new, sui2016sparse, di2015region}。X10拥有内置的高级并发结构，如async、atomic和finish，以此来简化并行程序的分析和优化。基于这种语言，Agarwal等人 \cite{agarwal2007may}提出的一种MHP分析算法仅遍历X10程序的程序结构树。Sanker等人\cite{sankar2016improved}对这个算法进行了扩展，通过一种对MHP条件的更高效的表示形式改善了计算复杂度。Joshi等人\cite{joshi2012new}提高了MHP分析的精度，通过对动态屏障间距的推理推断出语句间的顺序。Naumovich等人\cite{naumovich1999efficient}提出了一种面向Java的使用数据流分析框架的MHP分析技术。此技术构建并行执行图（PEG）来表示Java并发程序，并使用PEG推测不同指令间的MHP关系。Barik\cite{barik2005efficient} 通过牺牲精度的方式换取效率，其采用的算法基于线程创建树从线程层面计算MHP关系。高层次并发结构的MHP分析简化了复杂性，最近的工作也分析了低层语言中的MHP关系。Di等人\cite{di2015region}通过分析局部关系图（RRG）计算Pthreads程序的MHP关系。RRG是基于线程敏感的CFG构建的，具有相同happens-before性质的语句会被分到同一区域中。该工作只建模了\create 和 \join。而LDruid\cite{zhou2018may} 方法通过静态地计算时钟向量来建立happens-before关系，并建模了四种线程操作（\create, \join, \wait 和 \notify）。
+
+\subsection{Static methods:} 
+静态方法聚焦于在不执行程序的情况下检测数据竞争，这样可以消除漏报\cite{pratikakis2006locksmith, engler2003racerx, radoi2013practical, zhan2016echo, naik2006effective, voung2007relay, vojdani2016static, li2019sword, blackshear2018racerd}。但由于缺少运行时信息，误报很难避免。Polyvios等人 \cite{pratikakis2006locksmith}开发出的LOCKSMITH是一个针对数据竞争的上下文敏感的相关性分析工具。它使用基于约束的技术来计算描述保护左值的锁的关联。LOCKSMITH仅仅被应用于检测100K行代码的程序\cite{voung2007relay}。Goblint\cite{vojdani2016static}将指针和值分析相结合从而使其能够处理复杂的加锁情况。RELAY \cite{naik2006effective} 是一种使用自底向上分析方法的静态可扩展算法。它采用符号执行、指针分析、锁集分析、受保护访问分析的方法产生竞争警报。IteRace \cite{radoi2013practical} 是一种针对Java并行循环的静态数据竞争检测工具，它通过专门处理lambda式并行循环、跟踪、汇总，实现了较低的误报率。但其只能分析并行循环。ECHO \cite{zhan2016echo} 能够在编写代码期间在IDE中实时检测数据竞争。为了能在IDE中使用，它采用的指针分析在程序有修改时会增量分析。然而由于对分析速度存在的要求，它不是上下文敏感和路径敏感的。RacerX \cite{engler2003racerx}使用流敏感的过程间分析检测数据竞争以及死锁。然而为了实现可扩展，它丢弃了一些程序信息，例如使用类型表示所有左值，这就导致了它是不完善的。据我们所知，这些静态分析技术都没有同时实现上下文、流、路径敏感，大部分技术仅实现了其中的一部分。例如，Goblint\cite{vojdani2016static}在分析锁集时只实现了路径敏感分析。
+
+\subsection{Static Analysis in interrupt-driven programs.}
+There has been some work on using static analysis to 
+verify the correctness of interrupt-driven 
+programs~\cite{wei2011static, chen2011static, regehr2007interrupt, fmcad11}.
+For example, Regehr et al. \cite{regehr2007interrupt} propose a method to 
+statically verify interrupt-driven programs. Their work first 
+outlines the significant ways in which interrupts 
+are different from threads from the point of view of verifying the absence of race conditions.
+It then develops a source-to-source transformation method to
+transform an interrupt-driven program into a semantically 
+equivalent thread-based program so that a thread-level static race
+detection tool can be used to find race conditions, which is
+the main benefit of their approach. Comparing to \cite{regehr2007interrupt}, \Name{} has two 
+advantages.  First, proof of the correctness of code transformation is often non-trivial; 
+\cite{regehr2007interrupt} does not provide  proofs showing the transformation is correct
+or scalable. In contrast, \Name{} is transparent and does not require 
+any source code transformation or instrumentation and can be applied
+to the original source code. Second,  \Name{}  uses dynamic analysis 
+to validate warnings reported by static race detectors. 
+Our evaluation showed that \Name{} can eliminate a large portion
+of false positives produced by static analysis, 
+whereas Regehr's work \cite{regehr2007interrupt}  on 
+seven Tiny OS applications does not evaluate the precision of
+their technique. 
+
+Jonathan et al.~\cite{fmcad11} first statically 
+translate interrupt-driven programs into sequential 
+programs by bounding the number of interrupts, 
+and  then use testing to measure execution time. 
+While static analysis is powerful, it can
+report false positives due to imprecise local
+information and infeasible paths. In addition, as embedded
+systems are highly dependent on hardware, it is
+difficult for static analysis to annotate all
+operations on manipulated hardware bits; moreover,
+hardware events such as interrupts usually rely on
+several operations among different hardware bits.
+\Name{} leverages the advantages of static analysis
+to guide precise race detection. 
+%\wy{Add a reference}
+Techniques combined with static and dynamic method \cite{wang2015detecting}
+could also detect and verify races. However, due to the lack of test case generation
+method, Manually efforts are required to inspect codes and generate test cases
+to reach race points.
+
+已经有关于使用静态分析来验证中断驱动程序的正确性的一些研究\cite{wei2011static, chen2011static, regehr2007interrupt, fmcad11}。例如，Regehr等。\cite{regehr2007interrupt}提出了一种静态验证中断驱动程序的方法。他们的工作首先从验证不存在竞争条件的角度概述了中断与线程不同的重要方法。然后开发了一种源到源转换方法，以将中断驱动的程序转换为语义上等效的基于线程的程序，以便可以使用线程级静态竞争检测工具查找竞争条件，这是其方法的主要优点。与\cite{regehr2007interrupt}相比，\Name{}具有两个优点。首先，代码转换正确性的证明通常是不重要的;\cite{regehr2007interrupt}没有提供证明转换正确或可扩展的证明。相反，\Name{}是透明的，可以在不需要任何源代码转换或插桩的情况下应用于原始源代码。其次，\Name{}使用动态分析来验证静态竞争监测报告的警告。我们的评估表明，\Name{}可以消除静态分析产生的大部分误报，而Regehr在7种Tiny OS应用程序上的工作\cite{regehr2007interrupt}并未评估其技术的准确性。
+
+Jonathan等~\cite{fmcad11}首先通过限制中断数量将中断驱动程序静态转换为顺序程序，然后使用测试来测量执行时间。尽管静态分析功能强大，但由于本地信息不准确且路径不可行，它可能会发生误报。另外由于嵌入式系统高度依赖于硬件，因此静态分析很难对操纵的硬件位上的所有操作进行注释，而且诸如中断之类的硬件事件通常依赖于不同硬件位之间的几种操作。\Name{}利用静态分析的优势来指导精确的竞争检测。结合静态和动态方法的技术\cite{wang2015detecting}也可以检测和验证竞争。 但是由于缺少测试用例生成方法，因此需要手动检查代码并生成测试用例以达到竞争点。
+
+\section{动态缺陷检测与验证技术}\label{sec:related:dyn}
+\subsection{动态分析}
+
+\textbf{Dynamic methods:} there have been lots of researches on the dynamic method, including partial order based techniques \cite{kini2017dynamic}, sampling-based techniques \cite{marino2009literace, bond2010pacer} and off-line trace analysis techniques \cite{huang2013clap, machado2015concurrency, huang2016precise, zhang2017prorace}. 
+Dynamic methods usually report true bugs but have false negatives due to paths that not executed. 
+Additionally, time and memory overheads in dynamic methods are the main performance issues that introduced by executing instrumented instructions.
+Dileep et. al. \cite{kini2017dynamic} present a new relation weak-causally-precedes (WCP), it is a liner time algorithm for the whole program. 
+It is provably better than causally-precedes relation in terms of being able to detect more races, while still remaining sound. 
+Pacer \cite{bond2010pacer} performs the full monitoring only for a fixed fraction of the time. 
+Therefore, the probability of catching a race is roughly proportional to this fraction multiplied by the number of times the race repeats. 
+The method may miss races even when the path is executed.
+TxRace \cite{zhang2016txrace} performs lightweight data race detection based on commodity hardware transactional memory at first, and occasionally switches to slow yet precise data race detection only for the small fraction of execution intervals in which potential races are reported by HTM. 
+Peng et. al. \cite{di2016accelerating} proposes thread interference analysis, 
+eliminating redundant race check and boosts the dynamic race detection by performing static optimizations on top of a series of thread interference analysis phases.
+
+\textbf{Offline analysis:} some methods avoid runtime analysis and log traces for offline analysis.
+CLAP \cite{huang2013clap} provides an ordering of shared variable accesses by solving logged traces. 
+CLAP formulates the problem of reproducing concurrency bugs as a constraint solving problem, the goal of which is to compute a reproduced shared data accesses order.
+Symbiosis \cite{machado2015concurrency} reports the root cause of a failing multi-threaded execution. 
+It consists of five phases to solve the root cause (\ie, shortest path) of the recorded execution path.
+RDIT \cite{huang2016precise} detects data races in multithreaded programs with incomplete trace information. 
+The key observation is that although the computations inside the missing methods are unknown, the invocation of those missing methods can usually be captured. 
+The runtime data at the invocation sites actually provides valuable information to approximate the behavior of the missing computations.
+ProRace \cite{zhang2017prorace} samples instructions using the performance monitoring unit (PMU). 
+Benefiting from the PMU, ProRace could sample more memory accesses at a lower cost compared to the state-of-the-art Linux driver. 
+Moreover, it uses PMU-provided execution contexts including register states and program path, and reconstructs unsampled memory accesses offline.
+LiteRace \cite{marino2009literace} samples and analyzes selected portions of a program's execution. 
+It instruments the function that logs all memory accesses and synchronization operations.
+
+\textbf{动态方法:}关于动态方法的研究很多，包括基于偏序的技术\cite{kini2017dynamic}，基于采样的技术\cite{marino2009literace, bond2010pacer}和离线跟踪分析技术\cite{huang2013clap, machado2015concurrency, huang2016precise, zhang2017prorace}。动态方法通常报告真实的错误，但是由于未执行的路径而导致漏报。此外，动态方法中的时间和内存开销是执行检测指令所引入的主要性能问题。 Dileep等\cite{kini2017dynamic} 提出了一个新的弱因果关系(WCP)，它是整个程序的线性时间算法。它在能够检测更多竞争的同时仍保持不漏报这一方面方面比因果关系更好。 Pacer\cite{bond2010pacer}仅在固定的时间内执行完全监视。因此参加竞争的概率与该分数乘以竞争重复的次数大致成比例。即使执行路径，该方法也可能会错过竞争。 TxRace \cite{zhang2016txrace} 首先基于商品硬件事务存储器执行轻量级数据竞争检测，偶尔切换到缓慢而精确的数据竞争检测，仅适用于HTM报告潜在竞争的执行interval的一小部分。Peng等\cite{di2016accelerating}提出了线程干扰分析，通过在一系列线程干扰分析阶段之上执行静态优化，消除了多余的竞争检查，并增强了动态竞争检测。
+
+\textbf{离线分析:}某些方法避免运行时分析和日志跟踪以进行离线分析。 CLAP \cite{huang2013clap} 通过解决记录的跟踪提供了共享变量访问的顺序。 CLAP将重现并发错误的问题表示为约束解决问题，其目标是计算重现的共享数据访问顺序。 Symbiosis\cite{machado2015concurrency}报告了多线程执行失败的根本原因。 它由五个阶段组成，以解决记录的执行路径的根本原因(\ie, 最短路径)。 RDIT\cite{huang2016precise}在具有不完整跟踪信息的多线程程序中检测数据竞争。观测到关键的是，尽管丢失方法内部的计算是未知的，但是通常可以捕获这些丢失方法的调用。调用站点上的运行时数据实际上提供了有价值的信息，以估算缺少计算的行为。ProRace\cite{zhang2017prorace} 使用性能监视单元(PMU)对指令进行采样。受益于PMU，与最新的Linux驱动程序相比，ProRace可以以更低的成本对更多的内存访问进行采样。此外，它使用PMU提供的执行上下文，包括寄存器状态和程序路径，并离线重建未采样的内存访问。LiteRace\cite{marino2009literace}采样并分析程序执行的选定部分。它有记录所有内存访问和同步操作的功能。
+
+%\subsection{Dynamic Testing in event driven programs}
+\subsection{Dynamic Testing in event driven programs.}
+There has been some research on testing for concurrency faults in event-driven
+programs, such as mobile applications~\cite{Hsiao2014, Maiya14, Hu2016, bielik2015scalable} 
+and web applications~\cite{raychev2013effective,hong2014detecting}. 
+Although the event execution models of event-driven and interrupt-driven
+have similarities, they are different in several ways. 
+First, unlike event-driven programs that maintain an event queue as first-in,
+first-out (FIFO) basis, interrupt handlers are often assigned to different priorities 
+and can be preempted. Second, interrupts and their priorities
+can be created and changed dynamically and such dynamic behaviors
+can only be observed at the hardware level. 
+Third, the events in event-driven programs are employed
+at a higher-level (\eg, code), whereas hardware interrupts happen at a 
+lower-level (\eg, CPU); interrupts can occur only when hardware
+components are in certain states. The unique characteristics of interrupts 
+render inapplicable the existing race detection techniques for event-driven
+programs. 
+
+目前已经有对于测试事件驱动程序中的并发错误的研究，例如移动应用程序~\cite{Hsiao2014, Maiya14, Hu2016, bielik2015scalable} 和Web应用程序~\cite{raychev2013effective,hong2014detecting}。 尽管事件驱动和中断驱动的事件执行模型具有相似之处，但是它们在几个方面有所不同。 第一，与将事件队列保持为先进先出(FIFO)基础的事件驱动程序不同，中断处理程序通常被分配给不同的优先级并且可以被抢占。第二，可以动态创建和更改中断及其优先级，并且只能在硬件级别观察到这种动态行为。 第三，事件驱动程序中的事件是在较高级别(\eg, 代码)使用的，而硬件中断发生在较低级别（例如，CPU）；只有在硬件组件处于某些状态时才可以发生中断。由于中断的独特特性，现有的用于事件驱动程序的竞争检测技术并不适用。
+
+\subsection{Dynamic Testing in interrupt-driven programs.}
+There are several techniques for testing embedded
+systems with a particular focus on interrupt-level 
+concurrency faults~\cite{Regehr05, yu2012simtester, lai2008inter,
+AST10Higashi}. For example, Regehr et
+al.~\cite{Regehr05} use random testing to test Tiny OS applications.  
+They propose a technique called restricted interrupt discipline (RID)
+to improve naive random testing (\ie, firing
+interrupts at random times) by eliminating aberrant
+interrupts. However, this technique
+is not cognizant of hardware states and may lead to 
+erroneous interrupts.  SimTester \cite{yu2012simtester} leverages VM to address
+this problem by firing interrupts conditionally 
+instead of randomly. Their
+evaluation shows that conditionally fired
+interrupts increase the chances of reducing cost.  
+However, all the foregoing techniques do not
+consider interrupt-specific event constraints
+(\eg, priorities) and may lead to imprecise results.
+In addition, they are incapable of
+automatically generating test inputs or repairing race conditions.
+In contrast, our approach can cover all
+feasible shared variables in the application instead of
+using arbitrary inputs; this can help the program
+execute code regions that are more race-prone.
+
+有几种尤其关注中断级并发错误~\cite{Regehr05, yu2012simtester, lai2008inter,AST10Higashi}的测试嵌入式系统的技术。例如，Regehr等~\cite{Regehr05}使用随机测试来测试Tiny OS应用程序。他们提出了一种称为受限中断规则(RID)的技术，以通过消除异常中断来改善随机测试(\ie, 在在随机时间触发中断)。但是此技术无法识别硬件状态，并可能导致错误的中断。SimTester\cite{yu2012simtester}通过有条件而不是随机触发中断来利用VM解决此问题。他们的评估表明，有条件触发的中断会增加降低成本的几率。但是所有前述技术都没有考虑特定于中断的事件约束(\eg, 优先级) ，并且可能导致不精确的结果。此外，它们无法自动生成测试输入或修复竞争条件。相比之下，我们的方法可以覆盖应用程序中所有可行的共享变量，而不必使用任意输入，这可以帮助程序执行更容易竞争的代码区域。
+
+\section{符号执行}
+There has been some research on 
+combining static analysis and symbolic execution
+to test and verify concurrent programs~\cite{Farzan13,sen2006cute,
+samak2015synthesizing, samak2016directed, Guo15, wang2017automatic}.
+For example,  Samak et. al. \cite{samak2016directed}  
+combine  static and dynamic analysis to synthesize 
+concurrent executions to expose concurrency bugs.
+Their approach first employs static analysis to identify the intermediate goals 
+towards failing an assertion and then uses 
+symbolic constraints extracted from the 
+execution trace to generate new executions that satisfy pending goals.
+Guo et al.~\cite{Guo15} use static analysis to identify program paths that do
+not lead to any failure and prune them away during symbolic execution.
+However, these techniques focus on multi-threaded
+programs while ignoring concurrency faults
+that occur at the interrupt level. 
+As discussed in Section~\ref{subsec:thread}, interrupts are different from
+threads in many ways.  On the other hand, we can 
+guide \Name{} to systematically explore interrupt
+interleavings or to target failing assertions. 
+
+已经有一些关于将静态分析和符号执行相结合以测试和验证并发程序的研究~\cite{Farzan13,sen2006cute, samak2015synthesizing, samak2016directed, Guo15, wang2017automatic}。例如，Samak等\cite{samak2016directed}结合静态和动态分析来综合并发执行以暴露并发错误。他们的方法首先采用静态分析来确定未能通过断言的中间目标，然后使用从执行跟踪中提取的符号约束来生成满足未决目标的新执行。Guo等.~\cite{Guo15}使用静态分析来确定不会导致任何故障的程序路径，并在符号执行期间将其修剪掉。 但是这些技术专注于多线程程序，而忽略了在中断级别发生的并发错误。 如~\ref{subsec:thread}节所述，中断在许多方面与线程不同。另一方面，我们可以引导\Name{}系统地探索中断交错或以失败的断言为目标。
+
+\section{SAT预测技术}\label{sec:related:dyn}
+
+Bello \etal \cite{Bello2016} present a framework to tackle combinatorial
+optimization problems using neural networks and reinforcement
+learning. They also apply it to other NP-hard problems such as
+traveling salesman problem and KnapSack.  It shows performance
+improvement compared to standard algorithmic methods.
+
+Wang \etal \cite{wang2018gameplay} propose another avenue for SAT. They cast
+symbolic reasoning problems directly as gameplay to leverage the full
+decision-making power of neural networks through deep reinforcement
+learning.  Most SAT solvers are based on the Conflict Driven Clause
+Learning (CDCL) algorithm, which is a typical symbolic reasoning
+process that can be cast as a game of controlling the branching
+decisions.  The results show that this method can obtain better
+performance.
+
+Xu \etal \cite{xu2012predicting} show that 70\% classification
+  accuracy can be obtained based on phase transition features on
+  uniform-random 3-SAT formulas. \tool's prediction accuracy is
+close under a similar experimental setup. In
+  addition, phase transition features vary on different kinds of
+  formulas, and thus a significant performance drop is expected on SAT
+  instances converted from SMT formulas.
+
+NeuroSAT~\citep{selsam2018learning} uses an undirected graph to
+represent CNFs and builds a model by two vectors, three multilayer
+perceptrons and two layer-norm LSTMs.  However, it needs to generate
+certain type of pairs to model SAT. In each pair, one element is
+satisfiable, the other is unsatisfiable, and the two differ by
+negating only a single literal occurrence in a single clause.
+Therefore, the training data is constrained by this requirement, which
+means for some data like uniform 3-SAT, it takes significant amount
+of time to generate the training data. In contrast, for \tool, any
+training data is useful.  NeuroSAT is unable to precisely predict
+satisfiability when the number of variables is large.
+DG-DAGRNN \cite{amizadeh2018learning} claims that previous methods 
+primarily approached the SAT problem as a binary classification 
+problem and proposed a clustering-based post-processing analysis 
+to find a SAT solution.
+In contrast, it deals with circuit-SAT and represents them as 
+directed acyclic graphs (DAG). 
+Then it proposes a deep learning framework for DAG
+and directly trained toward finding SAT 
+solutions without requiring SAT/UNSAT labels.
+\citet{bunz2017graph} propose a method based on Graph Neural Network
+that is able to classify SATs with around 60\% validation error. The
+representation is similar to NeuroSAT, which uses graphs to represent
+CNFs. Similar to NeuroSAT, both can only deal with formulas having 
+much smaller number of variables than \tool.
+
+Feature-based machine learning methods
+\citet{devlin2008satisfiability, grozea2014can} can also classify
+SATs. \citet{grozea2014can} aim to empirically test the ability of
+machine learning models to act as decision oracles for NP problems.
+They only evaluated the idea on formulas with up to 100 variables.
+The approach does not scale to formulas with more variables, such as
+those large formulas considered in this
+paper. \citet{devlin2008satisfiability} view the satisfiability
+problem as a classification task.  Based on easy to compute structural
+features of instances of large satisfiability problems, they use a
+variety of standard classifier learners to classify previously unseen
+instances of the satisfiability problem as either SAT or UNSAT.  The
+accuracy for classification is more than 90\%.  In comparison, \tool
+can predict variable assignments and handle much larger formulas.
+
+\section{基于机器学习的缺陷预测技术} \label{sec:related:ml}
+In this section, we survey prior works on learning models of source code.~\citet{Hindle10} pioneer the field of machine learning for source code. In particular, Hindle~\etal find that programs that people write are mostly simple and rather repetitive, and thus they are amenable to statistical language models. Their finding is based on the evidence that the n-gram language model captures regularities in software as well as it does in English.
+
+% As a direct improvement over~\cite{Hindle10},~\citet{Nguyen1145} incorporate semantic information into tokens, and models the regularities of software based on the semantic values rather than lexical values of the tokens. In addition to the local context of the tokens, they also consider the global properties of source files and pairwise associations of the tokens.
+
+Later, many works propose to elevate the learning from the level of token sequences~\cite{Hindle10,Pu2016,AAAI1714603,Nguyen1145} to that of abstract syntax trees~\cite{maddison2014structured,Alon:2019:CLD:3302515.3290353,alon2018code2seq} in an attempt to capture the structure properties exhibited in source code. Notably,~\citet{Alon:2019:CLD:3302515.3290353} present a method for function name prediction. Specifically, it decomposes a program to a collection of paths in its abstract syntax tree, and learns the atomic representation of each path simultaneously with learning how to aggregate a set of them.
+
+Nowadays, graph neural networks have become undoubtedly the most popular deep model of source code. Since the introduction of graph neural networks to the programming domain~\cite{li2015gated,allamanis2017learning}, they have been applied to a variety of PL tasks, such as program summarization~\cite{fernandes2018structured}, bug localization and fixing~\cite{Dinella2020HOPPITY}, and type inference~\cite{Wei2020LambdaNet}. Apart from being thoroughly studied and constantly improved in the machine learning field, GNN's capability of encoding semantic structure of code through a graph representation is a primary contributor to their success. While our work also builds upon GNN, we offer a fundamentally different perspective which no prior works have explored. That is program abstraction helps machine learning models to capture the essence of the semantics programs denote, and in turn facilitating the execution of downstream tasks in a precise and efficient manner. 
+
+In parallel to all the aforementioned works, a separate line of works has emerged recently that use program executions (\ie dynamic models)~\cite{wang2017dynamic,wang2019learning,Wang101145} rather than source code (\ie static models) for learning program representations. Their argument is that source code alone may not be sufficient for models to capture the semantic program properties.~\citet{wang2019coset} show simple, natural transformations, albeit semantically-preserving, can heavily influence the predictions of models learned from source code. In contrast, executions that offer direct, precise, and canonicalized representations of the program behavior help models to generalize beyond syntactic features. On the flip side, dynamic models are likely to suffer from the low quality of training data since high-coverage executions are hard to obtain.~\citet{Wang101145} address this issue by blending both
+% feature dimensions, 
+source code and program executions.
+% , for learning semantic program embeddings. 
+Our work is set to improve static models via program abstraction, therefore we don't consider runtime information as a feature dimension, which can be an interesting future direction to explore.
